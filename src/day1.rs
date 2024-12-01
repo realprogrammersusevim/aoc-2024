@@ -50,27 +50,21 @@ fn part2(input: String) -> i32 {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_part1() {
-        let input = "3   4
+    const INPUT: &str = "3   4
 4   3
 2   5
 1   3
 3   9
 3   3
 ";
-        assert_eq!(part1(input.to_string()), 11);
+
+    #[test]
+    fn test_part1() {
+        assert_eq!(part1(INPUT.to_string()), 11);
     }
 
     #[test]
     fn test_part2() {
-        let input = "3   4
-4   3
-2   5
-1   3
-3   9
-3   3
-";
-        assert_eq!(part2(input.to_string()), 31);
+        assert_eq!(part2(INPUT.to_string()), 31);
     }
 }
