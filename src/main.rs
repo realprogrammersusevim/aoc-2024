@@ -1,5 +1,6 @@
 use std::env;
 mod day1;
+mod day2;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -10,7 +11,7 @@ fn main() {
         match args[1].parse::<u32>() {
             Ok(day) => match day {
                 1 => day1::run(),
-                2 => todo!(),
+                2 => day2::run(),
                 3 => todo!(),
                 4 => todo!(),
                 5 => todo!(),
