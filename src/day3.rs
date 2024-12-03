@@ -1,3 +1,4 @@
+use std::collections::VecDeque;
 use std::fs::read_to_string;
 
 // Remember, we're doing this without regex, because what's the fun in that?
@@ -9,108 +10,132 @@ pub fn run() {
 }
 
 fn part1(input: String) -> i64 {
-    let funcs = parse_muls(input);
-    let mut total = 0;
-
-    for (func_name, args) in funcs.clone() {
-        if func_name == "mul" {
-            let a: i64 = args[0].parse().unwrap();
-            let b: i64 = args[1].parse().unwrap();
-            total += a * b;
-        }
-    }
-
-    total
+    let mut state = State::new(input.chars().collect(), false);
+    state.execute();
+    state.acc as i64
 }
 
 fn part2(input: String) -> i64 {
-    let funcs = parse_muls(input);
-    let mut total = 0;
-
-    let mut enabled = true;
-
-    for (func_name, args) in funcs {
-        if func_name == "mul" && enabled {
-            let a: i64 = args[0].parse().unwrap();
-            let b: i64 = args[1].parse().unwrap();
-            total += a * b;
-        } else if func_name == "do" {
-            enabled = true;
-        } else if func_name == "don't" {
-            enabled = false;
-        }
-    }
-
-    total
+    let mut state = State::new(input.chars().collect(), true);
+    state.execute();
+    state.acc as i64
 }
 
-fn parse_muls(input: String) -> Vec<(String, Vec<String>)> {
-    let mut chars = input.chars().peekable();
+struct State {
+    memory: VecDeque<char>,
+    allow_disabled: bool,
+    enabled: bool,
+    acc: i32,
+}
 
-    let mut functions = vec![];
-
-    while let Some(ch) = chars.next() {
-        if ch == 'm' || ch == 'd' {
-            // Parse the function name
-            let mut func_name = ch.to_string();
-            while let Some(&next_ch) = chars.peek() {
-                if next_ch.is_alphabetic() || next_ch == '\'' {
-                    func_name.push(chars.next().unwrap());
-                } else {
-                    break;
-                }
-            }
-
-            // Check if it's followed by parentheses
-            if chars.peek() == Some(&'(') {
-                chars.next(); // Consume '('
-
-                // Parse the arguments
-                let mut args = Vec::new();
-                let mut current_arg = String::new();
-
-                while let Some(&next_ch) = chars.peek() {
-                    match next_ch {
-                        ',' => {
-                            // Finish the current argument
-                            if !current_arg.is_empty() {
-                                args.push(current_arg.to_string());
-                                current_arg = String::new();
-                            }
-                            chars.next(); // Consume ','
-                        }
-                        ')' => {
-                            // Finish the last argument
-                            if !current_arg.is_empty() {
-                                args.push(current_arg.to_string());
-                            }
-                            chars.next(); // Consume ')'
-                            break;
-                        }
-                        '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9' => {
-                            // Collect the argument
-                            current_arg.push(next_ch);
-                            chars.next();
-                        }
-                        _ => {
-                            // Illegal character
-                            chars.next();
-                            break;
-                        }
-                    }
-                }
-
-                // Check if the function is legal
-                if (args.is_empty() && (func_name == "do" || func_name == "don't"))
-                    || (args.len() == 2 && func_name == "mul")
-                {
-                    functions.push((func_name, args));
-                }
-            }
+impl State {
+    fn new(memory: VecDeque<char>, allow_disabled: bool) -> Self {
+        Self {
+            memory,
+            allow_disabled,
+            enabled: true,
+            acc: 0,
         }
     }
 
-    functions
+    fn execute(&mut self) {
+        loop {
+            if self.memory.is_empty() {
+                break;
+            }
+
+            match self.memory.front() {
+                Some(&'d') => {
+                    if let Some(((), remain)) = self.parse_static("do()") {
+                        self.state(true);
+                        self.memory = remain;
+                        continue;
+                    } else if let Some(((), remain)) = self.parse_static("don't()") {
+                        self.state(false);
+                        self.memory = remain;
+                        continue;
+                    }
+                }
+                Some(&'m') => {
+                    if let Some(((x, y), remain)) = self.parse_mul() {
+                        if self.enabled {
+                            self.acc += x * y;
+                        }
+                        self.memory = remain;
+                        continue;
+                    }
+                }
+                _ => {}
+            }
+
+            self.memory.pop_front(); // Drop the first character
+        }
+    }
+
+    fn state(&mut self, state: bool) {
+        if self.allow_disabled {
+            self.enabled = state;
+        }
+    }
+
+    fn parse_static(&self, prefix: &str) -> Option<((), VecDeque<char>)> {
+        let mut memory = self.memory.clone();
+        if memory.len() >= prefix.len()
+            && memory.iter().take(prefix.len()).collect::<String>() == prefix
+        {
+            for _ in 0..prefix.len() {
+                memory.pop_front();
+            }
+            Some(((), memory))
+        } else {
+            None
+        }
+    }
+
+    fn parse_mul(&self) -> Option<((i32, i32), VecDeque<char>)> {
+        let mut memory = self.memory.clone();
+        let prefix = "mul(";
+        if memory.len() < prefix.len()
+            || memory.iter().take(prefix.len()).collect::<String>() != prefix
+        {
+            return None;
+        }
+
+        for _ in 0..prefix.len() {
+            memory.pop_front(); // Remove "mul("
+        }
+
+        let mut num_buf = String::new();
+        while let Some(c) = memory.front() {
+            if *c == ',' {
+                memory.pop_front(); // Remove ','
+                break;
+            } else if c.is_ascii_digit() {
+                num_buf.push(*c);
+                memory.pop_front();
+            } else {
+                return None; // Invalid character for number parsing
+            }
+        }
+
+        let x: i32 = num_buf.parse().ok()?;
+        num_buf.clear();
+
+        while let Some(c) = memory.front() {
+            if *c == ')' {
+                memory.pop_front(); // Remove ')'
+                break;
+            } else if c.is_ascii_digit() || *c == '-' {
+                num_buf.push(*c);
+                memory.pop_front();
+            } else {
+                return None; // Invalid character for number parsing
+            }
+        }
+
+        let y: i32 = num_buf.parse().ok()?;
+        Some(((x, y), memory))
+    }
 }
 
 #[cfg(test)]
@@ -123,24 +148,20 @@ mod tests {
         "xmul(2,4)&mul[3,7]!^don't()_mul(5,5)+mul(32,64](mul(11,8)undo()?mul(8,5))";
 
     #[test]
-    fn test_part1_parse() {
-        let funcs = parse_muls(FIRST_INPUT.to_string());
-        assert_eq!(funcs.len(), 4);
-    }
-
-    #[test]
     fn test_part1() {
-        assert_eq!(part1(FIRST_INPUT.to_string()), 161);
-    }
-
-    #[test]
-    fn test_part2_parse() {
-        let funcs = parse_muls(SECOND_INPUT.to_string());
-        assert_eq!(funcs.len(), 6);
+        let initial_memory: VecDeque<char> = FIRST_INPUT.chars().collect();
+        let mut state = State::new(initial_memory, false);
+        state.execute();
+        //assert_eq!(state.enabled, true);
+        assert_eq!(state.acc, 161);
     }
 
     #[test]
     fn test_part2() {
-        assert_eq!(part2(SECOND_INPUT.to_string()), 48);
+        let initial_memory: VecDeque<char> = SECOND_INPUT.chars().collect();
+        let mut state = State::new(initial_memory, true);
+        state.execute();
+        //assert_eq!(state.enabled, true);
+        assert_eq!(state.acc, 48);
     }
 }
