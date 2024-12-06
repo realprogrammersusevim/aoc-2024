@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 pub fn run() {
     let input = include_str!("../data/day5");
 
@@ -57,51 +59,42 @@ fn get_rules(update: Vec<usize>, rules: Vec<(usize, usize)>) -> Vec<(usize, usiz
 }
 
 fn sort_by_rules(rules: Vec<(usize, usize)>) -> Vec<usize> {
-    let mut smallers: Vec<usize> = vec![];
-    let mut largers: Vec<usize> = vec![];
+    // Create a graph representation
+    let mut in_degree = HashMap::new(); // Tracks how many prerequisites each node has
+    let mut graph = HashMap::new(); // Adjacency list
 
-    for (smaller, larger) in &rules {
-        smallers.push(*smaller);
-        largers.push(*larger);
+    for (smaller, larger) in rules {
+        graph.entry(smaller).or_insert_with(Vec::new).push(larger);
+        *in_degree.entry(larger).or_insert(0) += 1;
+        in_degree.entry(smaller).or_insert(0); // Ensure smaller exists in the in-degree map
     }
 
-    smallers.sort();
-    smallers.dedup();
-    largers.sort();
-    largers.dedup();
+    // Find all items with no prerequisites (in-degree = 0)
+    let mut queue: Vec<usize> = in_degree
+        .iter()
+        .filter(|(_, &degree)| degree == 0)
+        .map(|(&node, _)| node)
+        .collect();
 
-    let smallest: Vec<&usize> = smallers.iter().filter(|x| !largers.contains(x)).collect();
+    queue.sort(); // Ensure deterministic order for nodes with no prerequisites
 
-    let mut sorted = vec![*smallest[0]];
+    let mut sorted = Vec::new();
 
-    // Only add the number if all the rules where it's larger are when the number is contained
-    // in sorted
-    while !largers.is_empty() {
-        let mut should_add: (usize, usize) = (0, 0);
-        for (i, num) in largers.iter().enumerate() {
-            let new_rules = rules.clone();
-            let all_smallers: Vec<usize> = new_rules
-                .iter()
-                .filter(|(_, larger)| larger == num)
-                .map(|(smaller, _)| *smaller)
-                .collect();
+    // Topological sort using Kahn's algorithm
+    while let Some(node) = queue.pop() {
+        sorted.push(node);
 
-            let mut is_next = true;
-
-            for smaller in all_smallers {
-                if !sorted.contains(&(smaller)) {
-                    is_next = false;
-                    break;
+        if let Some(neighbors) = graph.get(&node) {
+            for &neighbor in neighbors {
+                let entry = in_degree.get_mut(&neighbor).unwrap();
+                *entry -= 1;
+                if *entry == 0 {
+                    queue.push(neighbor);
                 }
-            }
-
-            if is_next {
-                should_add = (i, *num);
             }
         }
 
-        largers.swap_remove(should_add.0);
-        sorted.push(should_add.1);
+        queue.sort(); // Keep queue sorted for deterministic output
     }
 
     sorted
