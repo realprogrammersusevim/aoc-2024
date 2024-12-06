@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 pub fn run() {
     let input = include_str!("../data/day5");
 
@@ -13,14 +11,8 @@ fn part1(input: &str) -> usize {
     let mut total = 0;
 
     for update in updates {
-        let update_rules = get_rules(update.clone(), rules.clone());
-        let sorted_update = sort_by_rules(update_rules);
-        let correct_update: Vec<usize> = sorted_update
-            .iter()
-            .copied()
-            .filter(|x| update.contains(x))
-            .collect();
-        if correct_update == update {
+        let sorted_update = sort_by_rules(update.clone(), rules.clone());
+        if sorted_update == update {
             total += update[(update.len()) / 2] // It's correct, get the middle
         }
     }
@@ -34,70 +26,146 @@ fn part2(input: &str) -> usize {
     let mut total = 0;
 
     for update in updates {
-        let update_rules = get_rules(update.clone(), rules.clone());
-        let sorted_update = sort_by_rules(update_rules);
-        let correct_update: Vec<usize> = sorted_update
-            .iter()
-            .copied()
-            .filter(|x| update.contains(x))
-            .collect();
-
-        if correct_update != update {
-            total += correct_update[(correct_update.len()) / 2];
+        let sorted_update = sort_by_rules(update.clone(), rules.clone());
+        if sorted_update != update {
+            total += sorted_update[(sorted_update.len()) / 2];
         }
     }
 
     total
 }
 
-fn get_rules(update: Vec<usize>, rules: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
-    rules
-        .iter()
-        .copied()
-        .filter(|(smaller, larger)| update.contains(smaller) && update.contains(larger))
-        .collect()
+pub struct Graph {
+    nodes: Vec<NodeData>,
+    edges: Vec<EdgeData>,
 }
 
-fn sort_by_rules(rules: Vec<(usize, usize)>) -> Vec<usize> {
-    // Create a graph representation
-    let mut in_degree = HashMap::new(); // Tracks how many prerequisites each node has
-    let mut graph = HashMap::new(); // Adjacency list
+pub type NodeIndex = usize;
 
-    for (smaller, larger) in rules {
-        graph.entry(smaller).or_insert_with(Vec::new).push(larger);
-        *in_degree.entry(larger).or_insert(0) += 1;
-        in_degree.entry(smaller).or_insert(0); // Ensure smaller exists in the in-degree map
+pub struct NodeData {
+    first_outgoing_edge: Option<EdgeIndex>,
+}
+
+pub type EdgeIndex = usize;
+
+pub struct EdgeData {
+    target: NodeIndex,
+    next_outgoing_edge: Option<EdgeIndex>,
+}
+
+impl Graph {
+    pub fn add_node(&mut self) -> NodeIndex {
+        let index = self.nodes.len();
+        self.nodes.push(NodeData {
+            first_outgoing_edge: None,
+        });
+        index
     }
 
-    // Find all items with no prerequisites (in-degree = 0)
+    pub fn add_edge(&mut self, source: NodeIndex, target: NodeIndex) {
+        let edge_index = self.edges.len();
+        let node_data = &mut self.nodes[source];
+        self.edges.push(EdgeData {
+            target,
+            next_outgoing_edge: node_data.first_outgoing_edge,
+        });
+        node_data.first_outgoing_edge = Some(edge_index);
+    }
+
+    pub fn successors(&self, source: NodeIndex) -> Successors {
+        let first_outgoing_edge = self.nodes[source].first_outgoing_edge;
+        Successors {
+            graph: self,
+            current_edge_index: first_outgoing_edge,
+        }
+    }
+}
+
+pub struct Successors<'graph> {
+    graph: &'graph Graph,
+    current_edge_index: Option<EdgeIndex>,
+}
+
+impl<'graph> Iterator for Successors<'graph> {
+    type Item = NodeIndex;
+
+    fn next(&mut self) -> Option<NodeIndex> {
+        match self.current_edge_index {
+            None => None,
+            Some(edge_num) => {
+                let edge = &self.graph.edges[edge_num];
+                self.current_edge_index = edge.next_outgoing_edge;
+                Some(edge.target)
+            }
+        }
+    }
+}
+
+fn sort_by_rules(update: Vec<usize>, rules: Vec<(usize, usize)>) -> Vec<usize> {
+    let mut graph = Graph {
+        nodes: Vec::new(),
+        edges: Vec::new(),
+    };
+
+    // Map from node value to its index in the graph
+    let mut node_indices = std::collections::HashMap::new();
+
+    // Add nodes and edges to the graph
+    for (smaller, larger) in rules {
+        if update.contains(&smaller) && update.contains(&larger) {
+            let smaller_idx = *node_indices
+                .entry(smaller)
+                .or_insert_with(|| graph.add_node());
+            let larger_idx = *node_indices
+                .entry(larger)
+                .or_insert_with(|| graph.add_node());
+            graph.add_edge(smaller_idx, larger_idx);
+        }
+    }
+
+    // Track in-degrees of all nodes
+    let mut in_degree = vec![0; graph.nodes.len()];
+    for node_idx in 0..graph.nodes.len() {
+        for successor in graph.successors(node_idx) {
+            in_degree[successor] += 1;
+        }
+    }
+
+    // Find all nodes with no prerequisites (in-degree = 0)
     let mut queue: Vec<usize> = in_degree
         .iter()
-        .filter(|(_, &degree)| degree == 0)
-        .map(|(&node, _)| node)
+        .enumerate()
+        .filter(|&(_, &degree)| degree == 0)
+        .map(|(idx, _)| idx)
         .collect();
 
-    queue.sort(); // Ensure deterministic order for nodes with no prerequisites
+    queue.sort_unstable();
 
     let mut sorted = Vec::new();
 
-    // Topological sort using Kahn's algorithm
-    while let Some(node) = queue.pop() {
-        sorted.push(node);
+    while let Some(node_idx) = queue.pop() {
+        sorted.push(node_idx);
 
-        if let Some(neighbors) = graph.get(&node) {
-            for &neighbor in neighbors {
-                let entry = in_degree.get_mut(&neighbor).unwrap();
-                *entry -= 1;
-                if *entry == 0 {
-                    queue.push(neighbor);
-                }
+        for successor in graph.successors(node_idx) {
+            in_degree[successor] -= 1;
+            if in_degree[successor] == 0 {
+                queue.push(successor);
+                queue.sort_unstable(); // Keep sorted for deterministic output
             }
         }
+    }
 
-        queue.sort(); // Keep queue sorted for deterministic output
+    // Convert sorted indices back to original node values
+    let mut index_to_value: Vec<_> = vec![0; graph.nodes.len()];
+    for (value, &idx) in &node_indices {
+        index_to_value[idx] = *value;
     }
 
     sorted
+        .into_iter()
+        .map(|idx| index_to_value[idx])
+        .filter(|x| update.contains(x))
+        .collect()
 }
 
 fn parse(input: &str) -> (Vec<(usize, usize)>, Vec<Vec<usize>>) {
@@ -172,7 +240,10 @@ mod tests {
 
     #[test]
     fn test_rule_sort() {
-        let (rules, _) = parse(INPUT);
-        assert_eq!(sort_by_rules(rules), vec![97, 75, 47, 61, 53, 29, 13])
+        let (rules, updates) = parse(INPUT);
+        assert_eq!(
+            sort_by_rules(updates[1].clone(), rules),
+            vec![97, 61, 53, 29, 13]
+        )
     }
 }
