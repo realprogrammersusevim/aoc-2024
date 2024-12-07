@@ -6,14 +6,16 @@ pub fn run() {
 }
 
 fn part1(input: &str) -> usize {
-    let parsed = parse(input);
+    let (parsed, biggest) = parse(input);
 
     let mut total = 0;
 
-    for calib in parsed {
+    let mut combos: Vec<Vec<Vec<Operation>>> = Vec::new();
+
+    for i in 0..biggest {
         let mut combinations = vec![vec![]];
 
-        for _ in 0..calib.1.len() - 1 {
+        for _ in 0..i {
             let mut new_combinations = Vec::with_capacity(combinations.len() * 2);
             for combination in &combinations {
                 let mut with_add = combination.clone();
@@ -26,7 +28,12 @@ fn part1(input: &str) -> usize {
             }
             combinations = new_combinations;
         }
-        for op_list in combinations {
+
+        combos.push(combinations);
+    }
+
+    for calib in parsed {
+        for op_list in combos[calib.1.len() - 1].clone() {
             let mut val = calib.1[0];
             for (i, op) in op_list.iter().enumerate() {
                 match op {
@@ -47,14 +54,16 @@ fn part1(input: &str) -> usize {
 }
 
 fn part2(input: &str) -> usize {
-    let parsed = parse(input);
+    let (parsed, biggest) = parse(input);
 
     let mut total = 0;
 
-    for calib in parsed {
+    let mut combos: Vec<Vec<Vec<Operation>>> = Vec::new();
+
+    for i in 0..biggest {
         let mut combinations = vec![vec![]];
 
-        for _ in 0..calib.1.len() - 1 {
+        for _ in 0..i {
             let mut new_combinations = Vec::with_capacity(combinations.len() * 2);
             for combination in &combinations {
                 let mut with_add = combination.clone();
@@ -71,7 +80,12 @@ fn part2(input: &str) -> usize {
             }
             combinations = new_combinations;
         }
-        for op_list in combinations {
+
+        combos.push(combinations);
+    }
+
+    for calib in parsed {
+        for op_list in combos[calib.1.len() - 1].clone() {
             let mut val = calib.1[0];
             for (i, op) in op_list.iter().enumerate() {
                 match op {
@@ -110,8 +124,9 @@ enum Operation {
     Concat,
 }
 
-fn parse(input: &str) -> Vec<(usize, Vec<usize>)> {
+fn parse(input: &str) -> (Vec<(usize, Vec<usize>)>, usize) {
     let mut parsed = Vec::new();
+    let mut biggest = 0;
     for line in input.lines() {
         let str: Vec<&str> = line.split(": ").collect();
         let test: usize = str[0].parse().expect("Couldn't parse test value as number");
@@ -119,10 +134,13 @@ fn parse(input: &str) -> Vec<(usize, Vec<usize>)> {
             .split(" ")
             .map(|x| x.parse().expect("Couldn't parse number"))
             .collect();
-        parsed.push((test, nums))
+        parsed.push((test, nums.clone()));
+        if nums.len() > biggest {
+            biggest = nums.len();
+        }
     }
 
-    parsed
+    (parsed, biggest)
 }
 
 #[cfg(test)]
