@@ -77,9 +77,7 @@ fn part2(input: &str) -> usize {
                 match op {
                     Operation::Add => val += calib.1[i + 1],
                     Operation::Mul => val *= calib.1[i + 1],
-                    Operation::Concat => {
-                        val = format!("{}{}", val, calib.1[i + 1]).parse().unwrap()
-                    }
+                    Operation::Concat => val = concat(val, calib.1[i + 1]),
                 }
             }
 
@@ -91,6 +89,18 @@ fn part2(input: &str) -> usize {
     }
 
     total
+}
+
+fn concat(a: usize, b: usize) -> usize {
+    let mut multiplier = 1;
+    let mut temp = b;
+
+    while temp > 0 {
+        multiplier *= 10;
+        temp /= 10;
+    }
+
+    a * multiplier + b
 }
 
 #[derive(Clone, Debug)]
